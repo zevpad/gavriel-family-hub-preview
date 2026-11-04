@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow"><meta name="theme-color" content="#215c56"><title>Reset Parent Password · Gavriel Family Hub</title><link rel="stylesheet" href="./enhanced.css">
+<style>body{min-height:100dvh}.reset-shell{max-width:610px;margin:25px auto;padding:0 15px}.block{display:none}.block.on{display:block}.form{margin-top:20px}.link{color:#185e52;font-weight:700}.message{padding:12px;margin:12px 0;border-radius:10px;background:#e7f4ef;white-space:pre-line;line-height:1.5}.message.error{background:#fff0ef;color:#953b37}.main a{overflow-wrap:anywhere}.help{color:#677c85;font-size:13px;line-height:1.6}.stack{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}.stack button{flex:1}.code{font-family:monospace}</style></head>
+<body><header class="top"><div class="logo"><div class="glyph">G</div><div>Gavriel Family Hub<div class="muted" style="font-size:12px;font-weight:400">Private parent account recovery</div></div></div><span class="tag">SECURE RESET</span></header>
+<main class="reset-shell main"><div class="eyebrow">PARENT ACCOUNTS</div><h1 style="font-size:30px">Reset your password</h1>
+<p class="lead">This does not erase your family account, schedule, or food records.</p>
+<div id="message" aria-live="polite"></div>
+<section class="card block on" id="request"><h2>1. Request a reset email</h2><form id="requestForm" class="form">
+<label>Email address<input id="email" name="email" type="email" autocomplete="email" required placeholder="Your parent account email"></label>
+<button class="btn full" type="submit">Send password reset email</button></form>
+<p class="help">If the link opens an error page mentioning <strong>localhost</strong>, don't create another account. Return here and use the option below.</p>
+<div class="stack"><button class="btn soft" id="alreadyLink" type="button">I have the email link</button></div></section>
+<section class="card block" id="paste"><h2>2. Verify your recovery link</h2><p class="help">On your phone, open the reset email and <strong>press and hold</strong> the reset link to copy it. Paste that link below. Do not paste it into a chat or share it with anyone.</p>
+<form id="linkForm" class="form"><label>Paste private reset link<textarea id="recoveryLink" autocomplete="off" spellcheck="false" required rows="4" placeholder="https://..."></textarea></label><button type="submit" class="btn full">Verify link securely</button></form>
+<button type="button" class="btn soft" id="backEmail" style="margin-top:14px">Request a new email</button></section>
+<section class="card block" id="update"><h2>3. Choose a new password</h2><p class="help">Only the person who controls the recovery email can complete this step. Use a new password with at least 10 characters.</p>
+<form id="newPasswordForm" class="form">
+<label>New password<input id="newPassword" type="password" autocomplete="new-password" required minlength="10"></label>
+<label>Repeat new password<input id="confirmPassword" type="password" autocomplete="new-password" required minlength="10"></label>
+<button class="btn full">Save new password</button></form></section>
+<section class="card block" id="done"><h2>Password updated</h2><p>The password is saved. Sign in using your email address and your new password.</p><a class="btn" style="display:inline-block;text-decoration:none" href="./">Return to Gavriel Family Hub</a></section>
+<p class="help">If you are stuck, ask for help without sharing the reset link or password.</p>
+</main>
+<script type="module">
+import {createClient} from "https://esm.sh/@supabase/supabase-js@2.118.0";
+const supabase=createClient("https://aimyuiiroxdmgctazwed.supabase.co","sb_publishable_5JCWXq7QsN4SGKX3LkhbhA_aWxY37am",{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const sectionIds=["request","paste","update","done"];
+const $=id=>document.getElementById(id);
+function show(id){for(const name of sectionIds)$(name).classList.toggle("on",id===name);$("message").textContent="";$("message").className="";}
+function message(text,isError=false){$("message").textContent=text;$("message").className="message"+(isError?" error":"");}
+function disabled(form,on){for(const element of form.elements)element.disabled=on}
+supabase.auth.onAuthStateChange((event,session)=>{if(event==="PASSWORD_RECOVERY"&&session)show("update")});
+const isRecoveryReturn=new URLSearchParams(location.hash.slice(1)).get("type")==="recovery";
+if(isRecoveryReturn){const {data,error}=await supabase.auth.getSession();if(data?.session)show("update");else{show("paste");if(error)message("Session expired. Please use the original reset link.",true)}}
+$("requestForm").addEventListener("submit",async event=>{
+ event.preventDefault();const form=event.currentTarget, email=$("email").value.trim();disabled(form,true);
+ try{const {error}=await supabase.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});if(error)throw error;show("paste");message("Reset email requested for "+email+". Check Inbox and Spam. Copy the recovery link from the email and paste it below. If the link opens this page automatically, follow the new password form.");}
+ catch(error){message(error.message||"Could not request reset email.",true)}
+ finally{disabled(form,false)}
+});
+$("alreadyLink").addEventListener("click",()=>show("paste"));
+$("backEmail").addEventListener("click",()=>show("request"));
+$("linkForm").addEventListener("submit",async event=>{
+ event.preventDefault();const form=event.currentTarget;disabled(form,true);
+ try{
+ const u=new URL($("recoveryLink").value.trim());
+ let session=null;
+ if(u.origin==="https://aimyuiiroxdmgctazwed.supabase.co" && u.pathname==="/auth/v1/verify"){
+  const token=u.searchParams.get("token")||u.searchParams.get("token_hash");
+  if(!token || u.searchParams.get("type")!=="recovery")throw new Error("Please paste the recovery link from the password reset email.");
+  const {data,error}=await supabase.auth.verifyOtp({token_hash:token,type:"recovery"});
+  if(error)throw error;session=data.session;
+ }else{
+  const h=new URLSearchParams(u.hash.slice(1));
+  if(h.get("type")!=="recovery"||!h.get("access_token")||!h.get("refresh_token"))throw new Error("Please paste the original recovery email link, not a normal website link.");
+  const {data,error}=await supabase.auth.setSession({access_token:h.get("access_token"),refresh_token:h.get("refresh_token")});
+  if(error)throw error;session=data.session;
+ }
+ if(!session)throw new Error("Recovery link did not create a session. Request another email.");
+ $("recoveryLink").value="";
+ show("update");
+ }catch(error){message(error.message||"Invalid or expired link. Request a new email.",true)}
+ finally{disabled(form,false)}
+});
+$("newPasswordForm").addEventListener("submit",async event=>{
+ event.preventDefault();const form=event.currentTarget;
+ if($("newPassword").value!==$("confirmPassword").value){message("Passwords do not match.",true);return}
+ disabled(form,true);
+ try{const session=await supabase.auth.getSession();if(!session.data.session)throw new Error("Reset session expired. Please request a new email.");const {error}=await supabase.auth.updateUser({password:$("newPassword").value});if(error)throw error;$("newPassword").value="";$("confirmPassword").value="";await supabase.auth.signOut();show("done")}
+ catch(error){message(error.message||"Password update failed.",true)}
+ finally{disabled(form,false)}
+});
+</script></body></html>
